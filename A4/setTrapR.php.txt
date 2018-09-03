@@ -1,0 +1,24 @@
+<?php
+include('config.php');
+
+   $sql =("CREATE TABLE IF NOT EXISTS smk (
+                    IP TEXT , 
+                    port int , 
+                    community TEXT)");
+      $ret = $db->exec($sql);   
+
+if(isset($_GET['ip']) && ($_GET['port']) && ($_GET['community']))
+{
+  $addr = $_GET['ip'];
+  $port = $_GET['port'];
+  $comm = $_GET['community'];  
+  $ey =("INSERT INTO smk (IP, port, community) VALUES ('$addr', '$port', '$comm')");
+$ret = $db->exec($ey);
+  echo "OK";
+}
+else
+{
+  echo "FALSE";
+}
+
+?>

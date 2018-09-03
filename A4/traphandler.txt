@@ -1,0 +1,166 @@
+#!/usr/bin/perl
+
+use DBI;
+use NetSNMP::TrapReceiver;
+use Net::SNMP;
+
+
+
+my $grab; 
+my $grabbing;
+my $grab_prepare;
+
+    my $database = DBI->connect("DBI:SQLite:mohith.db"); 
+    
+    my $edo = qq(CREATE TABLE IF NOT EXISTS reddy
+         (D_N      TEXT    PRIMARY KEY NOT NULL,
+          N_S     INT     NOT NULL,
+          P_T     INT     NOT NULL,
+          O_S     INT     NOT NULL,
+          O_T     INT     NOT NULL););
+
+    my $create = $database->do($edo);
+
+sub mosb 
+{
+    foreach my $x (@{$_[1]}) 
+    {         
+        $keyoid=$x->[0];
+        $value=$x->[1]; 
+        if ("$keyoid" eq ".1.3.6.1.4.1.41717.10.1")
+          {
+            @FQDN = $FQDN . sprintf("%s",$value);
+            @presenttim = $presenttim . sprintf("%s", time());  
+          }
+        if ("$keyoid" eq ".1.3.6.1.4.1.41717.10.2")
+          {
+            @presentstat = $presentstat . sprintf("%s\n","$value");
+          } 
+    }
+$FQDN[-1] =~ s/\"//gs;
+
+    my $grab = qq(SELECT * from reddy;);
+    my $grab_prepare = $database->prepare( $grab );
+    my $grabbing = $grab_prepare->execute() or die $DBI::errstr;
+    my $red=0;
+    while(my @row = $grab_prepare->fetchrow_array()) 
+      {
+        $red=$red+1;
+      }
+
+    if ($red!=0)
+      {
+        $grab = qq(SELECT * from reddy;);
+        $grab_prepare = $database->prepare( $grab );
+        $grabbing = $grab_prepare->execute() or die $DBI::errstr;
+        my $orange = 0;
+        while(my @row = $grab_prepare->fetchrow_array()) 
+          {    
+            my $fqdn_db = $row[0];
+            my $status = $row[1];
+            my $tick = $row[2];
+            if ($fqdn_db eq $FQDN[0])
+              {
+#--------------------------------UPDATE-------------------------------------
+                my $update = qq(UPDATE reddy set D_N = '$FQDN[0]', N_S='$presentstat[0]', P_T= '$presenttim[0]', O_S='$status', O_T='$tick' where D_N='$FQDN[0]';);
+                my $updating = $database->do($update) or die $DBI::errstr;
+                print "updated, $FQDN[0],\n";
+#---------------------------------------------------------------------------
+              }
+            else
+              {
+                $orange = $orange + 1;
+              }
+           }
+        if ($orange == $red)
+          {
+#---------------------------------INSERT----------------------------------
+            my $put = qq(INSERT OR IGNORE INTO reddy (D_N,N_S, P_T, O_S, O_T) VALUES ('$FQDN[0]', '$presentstat[0]', '$presenttim[0]', '$presentstat[0]', '$presenttim[0]'));
+            my $putting = $database->do($put) or die $DBI::errstr;
+            print "NEW , $FQDN[0],\n";
+#--------------------------------------------------------------------------
+          }
+      }
+    else
+      {
+#---------------------------------INSERT----------------------------------
+        my $put = qq(INSERT INTO reddy (D_N, N_S, P_T, O_S, O_T) VALUES ('$FQDN[0]', '$presentstat[0]', '$presenttim[0]', '$presentstat[0]', '$presenttim[0]'));
+        my $putting = $database->do($put) or die $DBI::errstr;
+        print "first trap , $FQDN[0],\n";
+      }
+#--------------------------------------------------------------------------
+
+#------------------------------------ARRAY3-FAIL--------------------------------------------
+$grab = qq(SELECT * from reddy;);
+$grab_prepare = $database->prepare( $grab );
+$grabbing = $grab_prepare->execute() or die $DBI::errstr;
+my @array3 = ();
+while(my @row = $grab_prepare->fetchrow_array()) 
+  {
+    if ($row[1] == 3)
+      {
+        my @seperate = ('.1.3.6.1.4.1.41717.20.1', OCTET_STRING, $row[0], '.1.3.6.1.4.1.41717.20.2', TIMETICKS, $row[2], '.1.3.6.1.4.1.41717.20.3', INTEGER, "$row[3]", '.1.3.6.1.4.1.41717.20.4', TIMETICKS, $row[4]);
+        
+        push (@array3, @seperate);
+      }
+  }
+#--------------------------------------------------------------------------------------
+#++++++++++++++++++++++++++++++ARRAY2-DANGER+++++++++++++++++++++++++++++++++++++++++
+
+my @array2 = ();
+my $grab = qq(SELECT * from reddy;);
+my $grab_prepare = $database->prepare( $grab );
+my $grabbing = $grab_prepare->execute() or die $DBI::errstr;
+my $point = 1;
+ while(my @row = $grab_prepare->fetchrow_array()) 
+  {      
+   if ($row[1] == 2 && $row[3] != 3)
+     {
+       my @mix = ('.1.3.6.1.4.1.41717.30.'. (($point * 4)-3) , OCTET_STRING, $row[0], '.1.3.6.1.4.1.41717.30.'.(($point * 4)-2),  TIMETICKS, $row[2] , '.1.3.6.1.4.1.41717.30.'. (($point * 4)-1), INTEGER, $row[3], '.1.3.6.1.4.1.41717.30.'.(($point * 4)), TIMETICKS, $row[4]);    
+       push (@array2, @mix);
+       $point = $point +1;
+     }
+   }
+
+my @output = ();
+push @output, @array3;
+push @output, @array2;
+
+print "result","---------","@output","\n";
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#----------------------------TABLE SMK-----------------------------------
+$grab = qq(SELECT * from smk;);
+$grab_prepare = $database->prepare( $grab );
+$grabbing = $grab_prepare->execute() or die $DBI::errstr;
+while(my @row = $grab_prepare->fetchrow_array()) 
+  {
+    push @hostaddr, @row[0];
+    push @comm, $row[2];
+    push @port, $row[1];
+  }
+#----------------------------------------------------------------------------
+
+my ($session, $error) = Net::SNMP->session(
+    -version => 1,
+    -hostname  => $hostaddr[-1],
+    -community => $comm[-1],
+    -port      => $port[-1],
+);
+if (!defined($session)) {
+   printf("ERROR: %s.\n", $error);
+   exit1;
+}
+else {
+print "session\n";
+}
+
+my $trapping = $session->trap(
+			-varbindlist => \@output
+			);
+
+if (!defined($trapping)){print "An error occurred  " . $session->error();}
+else {print "Trap is sent to respective address\n\n\n\n";}
+}
+NetSNMP::TrapReceiver::register("all", \& mosb) || 
+  warn "failed to register perl trap handler\n";
+print "my code is correct!!!\n";

@@ -1,0 +1,24 @@
+#!/usr/bin/python
+import sys
+import subprocess
+import os
+from subprocess import Popen,PIPE
+m= sys.argv
+end ='unbuffer /tmp/A2/prober'
+cmd = [end, m[1], m[2],'-1']+ m[3:]
+p=','.join(cmd)
+z=p.replace(',',' ')
+#print z
+oids=[]
+for j in range(3,len(sys.argv)):
+    oids.append(sys.argv[j])
+#print oids
+proc = subprocess.Popen(z, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+
+for line in iter(proc.stdout.readline,''):
+    x=  line.split(' | ')
+    for oid in range(0,len(oids)):
+        #print oids[oid],x[oid+1],x[0],"\n"
+        
+        os.system("curl -i -XPOST 'http://localhost:8086/write?db=A3&u=ats&p=atslabb00&precision=s' --data-binary 'rate,oid='%s' value=%d %d'"%(oids[oid],int(x[oid+1]),int(x[0])))
